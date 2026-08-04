@@ -29,20 +29,20 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
-            steps {
-                sshagent(credentials: ['ec2-ssh']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@3.109.200.176"
-                    cd ~/django-cicd-project &&
-                    git pull origin main &&
-                    source venv/bin/activate &&
-                    pip install -r requirements.txt &&
-                    python3 manage.py migrate
-                    "
-                    '''
-                }
-            }
+       stage('Deploy') {
+    steps {
+        sshagent(credentials: ['ec2-ssh']) {
+            sh '''
+                ssh -o StrictHostKeyChecking=no ubuntu@3.109.200.176 << 'EOF'
+                cd ~/django-cicd-project
+                git pull origin main
+                source venv/bin/activate
+                pip install -r requirements.txt
+                python3 manage.py migrate
+                EOF
+            '''
         }
+    }
+}
     }
 }
