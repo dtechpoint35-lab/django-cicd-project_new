@@ -33,7 +33,7 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@<PRODUCTION_PUBLIC_IP> "
+                    ssh -o StrictHostKeyChecking=no ubuntu@3.109.200.176"
                     cd ~/django-cicd-project &&
                     git pull origin main &&
                     source venv/bin/activate &&
