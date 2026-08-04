@@ -1,0 +1,34 @@
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+.env
+media/
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual Environment
+venv/
+env/
+
+# Database
+db.sqlite3
+
+# Environment Variables
+.env
+
+# Static & Media
+media/
+staticfiles/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
