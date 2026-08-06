@@ -9,7 +9,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Source Code') {
             steps {
                 checkout scm
             }
@@ -38,35 +38,51 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 sshagent(credentials: ['ec2-ssh']) {
+
                     sh """
                     ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
-                        set -e
 
-                        cd ${PROD_DIR}
+                    set -e
 
-                        echo "========== CURRENT COMMIT =========="
-                        git log --oneline -1
+                    cd ${PROD_DIR}
 
-                        echo "========== FETCH LATEST CODE =========="
-                        git fetch origin
+                    echo "===== Updating Source Code ====="
 
-                        echo "========== RESET TO LATEST COMMIT =========="
-                        git reset --hard origin/main
+                    git fetch origin
+                    git reset --hard origin/main
 
-                        echo "========== UPDATED COMMIT =========="
-                        git log --oneline -1
+                    if [ ! -d "venv" ]; then
+                        python3 -m venv venv
+                    fi
 
-                        if [ ! -d "venv" ]; then
-                            python3 -m venv venv
-                        fi
+                    source venv/bin/activate
 
-                        source venv/bin/activate
+                    echo "===== Installing Dependencies ====="
 
-                        pip install -r requirements.txt
+                    pip install -r requirements.txt
 
-                        python3 manage.py migrate
+                    echo "===== Running Migrations ====="
 
-                        echo "========== DEPLOYMENT SUCCESSFUL =========="
+                    python3 manage.py migrate
+
+                    echo "===== Stopping Old Django Server ====="
+
+                    pkill -f "manage.py runserver" || true
+
+                    sleep 2
+
+                    echo "===== Starting Django Server ====="
+
+                    nohup python3 manage.py runserver 0.0.0.0:8000 > django.log 2>&1 &
+
+                    sleep 5
+
+                    echo "===== Checking Django Process ====="
+
+                    pgrep -f "manage.py runserver"
+
+                    echo "===== Deployment Successful ====="
+
                     '
                     """
                 }
@@ -75,11 +91,17 @@ pipeline {
     }
 
     post {
+
         success {
-            echo "✅ CI/CD Pipeline Completed Successfully"
+            echo "====================================="
+            echo "CI/CD Pipeline Completed Successfully"
+            echo "====================================="
         }
+
         failure {
-            echo "❌ CI/CD Pipeline Failed"
+            echo "====================================="
+            echo "CI/CD Pipeline Failed"
+            echo "====================================="
         }
     }
 }
