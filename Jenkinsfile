@@ -1,107 +1,52 @@
-pipeline {
-    agent any
+stage('Deploy to Production') {
+    steps {
+        sshagent(credentials: ['ec2-ssh']) {
+            sh """
+            ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
+                set -e
 
-    environment {
-        PROD_HOST = "3.109.200.176"
-        PROD_USER = "ubuntu"
-        PROD_DIR  = "/home/ubuntu/django-cicd-project_new"
-    }
+                cd ${PROD_DIR}
 
-    stages {
+                echo "========== CURRENT COMMIT =========="
+                git log --oneline -1
 
-        stage('Checkout Source Code') {
-            steps {
-                checkout scm
-            }
-        }
+                echo "========== FETCH LATEST CODE =========="
+                git fetch origin
 
-        stage('Setup Python Environment') {
-            steps {
-                sh '''
+                echo "========== RESET TO LATEST COMMIT =========="
+                git reset --hard origin/main
+
+                echo "========== UPDATED COMMIT =========="
+                git log --oneline -1
+
+                if [ ! -d "venv" ]; then
                     python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
-            }
-        }
+                fi
 
-        stage('Run Django Tests') {
-            steps {
-                sh '''
-                    . venv/bin/activate
-                    python3 manage.py test
-                '''
-            }
-        }
+                source venv/bin/activate
 
-        stage('Deploy to Production') {
-            steps {
-                sshagent(credentials: ['ec2-ssh']) {
+                echo "========== INSTALLING REQUIREMENTS =========="
+                pip install -r requirements.txt
 
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
+                echo "========== RUNNING MIGRATIONS =========="
+                python3 manage.py migrate
 
-                    set -e
+                echo "========== STOPPING OLD DJANGO SERVER =========="
+                pkill -f "manage.py runserver" || true
 
-                    cd ${PROD_DIR}
+                sleep 2
 
-                    echo "===== Updating Source Code ====="
+                echo "========== STARTING DJANGO SERVER =========="
+                nohup python3 manage.py runserver 0.0.0.0:8000 > django.log 2>&1 &
 
-                    git fetch origin
-                    git reset --hard origin/main
+                sleep 5
 
-                    if [ ! -d "venv" ]; then
-                        python3 -m venv venv
-                    fi
+                echo "========== VERIFYING DJANGO SERVER =========="
+                pgrep -f "manage.py runserver"
 
-                    source venv/bin/activate
-
-                    echo "===== Installing Dependencies ====="
-
-                    pip install -r requirements.txt
-
-                    echo "===== Running Migrations ====="
-
-                    python3 manage.py migrate
-
-                    echo "===== Stopping Old Django Server ====="
-
-                    pkill -f "manage.py runserver" || true
-
-                    sleep 2
-
-                    echo "===== Starting Django Server ====="
-
-                    nohup python3 manage.py runserver 0.0.0.0:8000 > django.log 2>&1 &
-
-                    sleep 5
-
-                    echo "===== Checking Django Process ====="
-
-                    pgrep -f "manage.py runserver"
-
-                    echo "===== Deployment Successful ====="
-
-                    '
-                    """
-                }
-            }
-        }
-    }
-
-    post {
-
-        success {
-            echo "====================================="
-            echo "CI/CD Pipeline Completed Successfully"
-            echo "====================================="
-        }
-
-        failure {
-            echo "====================================="
-            echo "CI/CD Pipeline Failed"
-            echo "====================================="
+                echo "========== DEPLOYMENT SUCCESSFUL =========="
+            '
+            """
         }
     }
 }
