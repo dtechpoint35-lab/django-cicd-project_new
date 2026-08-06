@@ -1,27 +1,21 @@
 pipeline {
     agent any
 
-    environment {
-        PROD_HOST = "3.109.200.176"
-        PROD_USER = "ubuntu"
-        PROD_DIR  = "/home/ubuntu/django-cicd-project_new"
-    }
-
     stages {
 
         stage('Checkout') {
             steps {
-                checkout scm
+                echo 'Source code checked out successfully.'
             }
         }
 
-        stage('Setup Python Environment') {
+        stage('Create Virtual Environment') {
             steps {
                 sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
+                python3 -m venv venv
+                . venv/bin/activate
+                pip install --upgrade pip
+                pip install -r requirements.txt
                 '''
             }
         }
@@ -29,66 +23,26 @@ pipeline {
         stage('Run Django Tests') {
             steps {
                 sh '''
-                    . venv/bin/activate
-                    python3 manage.py test
+                . venv/bin/activate
+                python manage.py test
                 '''
             }
         }
 
-        stage('Deploy to Production') {
+        stage('Deploy') {
             steps {
                 sshagent(credentials: ['ec2-ssh']) {
-
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
-                        set -e
-
-                        cd ${PROD_DIR}
-
-                        echo "===== Current Commit ====="
-                        git log --oneline -1
-
-                        echo "===== Pull Latest Code ====="
-                        git fetch origin
-                        git reset --hard origin/main
-
-                        echo "===== New Commit ====="
-                        git log --oneline -1
-
-                        if [ ! -d venv ]; then
-                            python3 -m venv venv
-                        fi
-
-                        source venv/bin/activate
-
-                        pip install -r requirements.txt
-
-                        python3 manage.py migrate
-
-                        pkill -f runserver || true
-
-                        nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
-
-                        echo "===== Deployment Successful ====="
-                    '
-                    """
-
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ubuntu@<PRODUCTION_PUBLIC_IP> "
+                    cd ~/django-cicd-project &&
+                    git pull origin main &&
+                    source venv/bin/activate &&
+                    pip install -r requirements.txt &&
+                    python3 manage.py migrate
+                    "
+                    '''
                 }
             }
         }
-
     }
-
-    post {
-
-        success {
-            echo 'CI/CD Pipeline Completed Successfully'
-        }
-
-        failure {
-            echo 'CI/CD Pipeline Failed'
-        }
-
-    }
-
 }
