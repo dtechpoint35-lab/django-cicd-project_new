@@ -1,11 +1,17 @@
 pipeline {
     agent any
 
+    environment {
+        PROD_SERVER = "3.109.200.176"
+        PROD_USER = "ubuntu"
+        PROD_PATH = "/home/ubuntu/django-cicd-project_new"
+    }
+
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Source code checked out successfully.'
+                checkout scm
             }
         }
 
@@ -24,25 +30,54 @@ pipeline {
             steps {
                 sh '''
                 . venv/bin/activate
-                python manage.py test
+                python3 manage.py test
                 '''
             }
         }
 
-    stage('Deploy') {
-    steps {
-        sshagent(credentials: ['ec2-ssh']) {
-            sh '''
-                ssh -o StrictHostKeyChecking=no ubuntu@3.109.200.176 "
-                    cd /home/ubuntu/django-cicd-project_new &&
-                    git pull origin main &&
-                    source venv/bin/activate &&
-                    pip install -r requirements.txt &&
-                    python3 manage.py migrate
-                "
-            '''
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['ec2-ssh']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_SERVER} '
+                        set -e
+
+                        cd ${PROD_PATH}
+
+                        echo "===== Current Commit ====="
+                        git log --oneline -1
+
+                        echo "===== Pull Latest Code ====="
+                        git fetch origin
+                        git reset --hard origin/main
+
+                        echo "===== New Commit ====="
+                        git log --oneline -1
+
+                        source venv/bin/activate
+
+                        pip install -r requirements.txt
+
+                        python3 manage.py migrate
+
+                        python3 manage.py collectstatic --noinput
+
+                        echo "Deployment Successful"
+                    '
+                    """
+                }
+            }
         }
     }
-}
+
+    post {
+
+        success {
+            echo "CI/CD Pipeline Completed Successfully"
+        }
+
+        failure {
+            echo "CI/CD Pipeline Failed"
+        }
     }
 }
