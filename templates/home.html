@@ -9,28 +9,28 @@ pipeline {
 
     stages {
 
-        stage('Checkout Source') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Setup Python') {
+        stage('Setup Python Environment') {
             steps {
                 sh '''
-                python3 -m venv venv
-                . venv/bin/activate
-                pip install --upgrade pip
-                pip install -r requirements.txt
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
                 '''
             }
         }
 
-        stage('Run Tests') {
+        stage('Run Django Tests') {
             steps {
                 sh '''
-                . venv/bin/activate
-                python3 manage.py test
+                    . venv/bin/activate
+                    python3 manage.py test
                 '''
             }
         }
@@ -45,36 +45,42 @@ pipeline {
 
                         cd ${PROD_DIR}
 
-                        echo "===== Updating Code ====="
+                        echo "===== Current Commit ====="
+                        git log --oneline -1
+
+                        echo "===== Pull Latest Code ====="
                         git fetch origin
                         git reset --hard origin/main
+
+                        echo "===== New Commit ====="
+                        git log --oneline -1
 
                         if [ ! -d venv ]; then
                             python3 -m venv venv
                         fi
 
-                        . venv/bin/activate
+                        source venv/bin/activate
 
                         pip install -r requirements.txt
 
                         python3 manage.py migrate
 
-                        pkill -f "manage.py runserver" || true
+                        pkill -f runserver || true
 
                         nohup python3 manage.py runserver 0.0.0.0:8000 > server.log 2>&1 &
 
-                        sleep 5
-
-                        echo "===== Deployment Finished ====="
+                        echo "===== Deployment Successful ====="
                     '
                     """
 
                 }
             }
         }
+
     }
 
     post {
+
         success {
             echo 'CI/CD Pipeline Completed Successfully'
         }
@@ -82,5 +88,7 @@ pipeline {
         failure {
             echo 'CI/CD Pipeline Failed'
         }
+
     }
+
 }
