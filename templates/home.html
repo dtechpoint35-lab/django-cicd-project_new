@@ -1,85 +1,36 @@
-pipeline {
-    agent any
-
-    environment {
-        PROD_HOST = "3.109.200.176"
-        PROD_USER = "ubuntu"
-        PROD_DIR  = "/home/ubuntu/django-cicd-project_new"
+{% extends 'base.html' %}
+{% block content %}
+  <style>
+    .home-banner {
+        background: linear-gradient(to right, #6a11cb, #2575fc);
+        color: white;
+        padding: 60px 40px;
+        text-align: center;
+        border-radius: 20px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
     }
 
-    stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Setup Python Environment') {
-            steps {
-                sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
-            }
-        }
-
-        stage('Run Django Tests') {
-            steps {
-                sh '''
-                    . venv/bin/activate
-                    python3 manage.py test
-                '''
-            }
-        }
-
-        stage('Deploy to Production') {
-            steps {
-                sshagent(credentials: ['ec2-ssh']) {
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
-                        set -e
-
-                        cd ${PROD_DIR}
-
-                        echo "========== CURRENT COMMIT =========="
-                        git log --oneline -1
-
-                        echo "========== FETCH LATEST CODE =========="
-                        git fetch origin
-
-                        echo "========== RESET TO LATEST COMMIT =========="
-                        git reset --hard origin/main
-
-                        echo "========== UPDATED COMMIT =========="
-                        git log --oneline -1
-
-                        if [ ! -d "venv" ]; then
-                            python3 -m venv venv
-                        fi
-
-                        source venv/bin/activate
-
-                        pip install -r requirements.txt
-
-                        python3 manage.py migrate
-
-                        echo "========== DEPLOYMENT SUCCESSFUL =========="
-                    '
-                    """
-                }
-            }
-        }
+    .home-banner h2 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 15px;
     }
 
-    post {
-        success {
-            echo "✅ CI/CD Pipeline Completed Successfully"
-        }
-        failure {
-            echo "❌ CI/CD Pipeline Failed"
-        }
+    .home-banner p {
+        font-size: 1.2rem;
+        margin-bottom: 25px;
     }
-}
+
+    .btn-shop {
+        font-size: 1rem;
+        padding: 10px 20px;
+        border-radius: 30px;
+    }
+  </style>
+
+  <div class="home-banner mt-5">
+    <h2>Welcome to the E-commerce Store3</h2>
+    <p>Discover exclusive products and great deals!</p>
+    
+  </div>
+{% endblock %}
