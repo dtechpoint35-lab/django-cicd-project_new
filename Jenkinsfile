@@ -1,52 +1,102 @@
-stage('Deploy to Production') {
-    steps {
-        sshagent(credentials: ['ec2-ssh']) {
-            sh """
-            ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
-                set -e
+pipeline {
+    agent any
 
-                cd ${PROD_DIR}
+    environment {
+        PROD_HOST = "3.109.200.176"
+        PROD_USER = "ubuntu"
+        PROD_DIR  = "/home/ubuntu/django-cicd-project_new"
+    }
 
-                echo "========== CURRENT COMMIT =========="
-                git log --oneline -1
+    stages {
 
-                echo "========== FETCH LATEST CODE =========="
-                git fetch origin
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
-                echo "========== RESET TO LATEST COMMIT =========="
-                git reset --hard origin/main
-
-                echo "========== UPDATED COMMIT =========="
-                git log --oneline -1
-
-                if [ ! -d "venv" ]; then
+        stage('Setup Python Environment') {
+            steps {
+                sh '''
                     python3 -m venv venv
-                fi
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                '''
+            }
+        }
 
-                source venv/bin/activate
+        stage('Run Django Tests') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    python3 manage.py test
+                '''
+            }
+        }
 
-                echo "========== INSTALLING REQUIREMENTS =========="
-                pip install -r requirements.txt
+        stage('Deploy to Production') {
+            steps {
+                sshagent(credentials: ['ec2-ssh']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} << EOF
+set -e
 
-                echo "========== RUNNING MIGRATIONS =========="
-                python3 manage.py migrate
+cd ${PROD_DIR}
 
-                echo "========== STOPPING OLD DJANGO SERVER =========="
-                pkill -f "manage.py runserver" || true
+echo "========== CURRENT COMMIT =========="
+git log --oneline -1
 
-                sleep 2
+echo "========== FETCH LATEST CODE =========="
+git fetch origin
+git reset --hard origin/main
 
-                echo "========== STARTING DJANGO SERVER =========="
-                nohup python3 manage.py runserver 0.0.0.0:8000 > django.log 2>&1 &
+echo "========== UPDATED COMMIT =========="
+git log --oneline -1
 
-                sleep 5
+if [ ! -d venv ]; then
+    python3 -m venv venv
+fi
 
-                echo "========== VERIFYING DJANGO SERVER =========="
-                pgrep -f "manage.py runserver"
+source venv/bin/activate
 
-                echo "========== DEPLOYMENT SUCCESSFUL =========="
-            '
-            """
+echo "========== INSTALLING REQUIREMENTS =========="
+pip install -r requirements.txt
+
+echo "========== RUNNING MIGRATIONS =========="
+python3 manage.py migrate
+
+echo "========== COLLECT STATIC =========="
+python3 manage.py collectstatic --noinput || true
+
+echo "========== STOPPING OLD DJANGO SERVER =========="
+pkill -f "manage.py runserver" || true
+
+sleep 2
+
+echo "========== STARTING DJANGO SERVER =========="
+nohup python3 manage.py runserver 0.0.0.0:8000 > django.log 2>&1 &
+
+sleep 5
+
+echo "========== VERIFY RUNSERVER =========="
+pgrep -f "manage.py runserver"
+
+echo "========== DEPLOYMENT SUCCESSFUL =========="
+EOF
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "CI/CD Pipeline Completed Successfully"
+        }
+
+        failure {
+            echo "CI/CD Pipeline Failed"
         }
     }
 }
