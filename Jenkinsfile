@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        PROD_SERVER = "3.109.200.176"
+        PROD_HOST = "3.109.200.176"
         PROD_USER = "ubuntu"
-        PROD_PATH = "/home/ubuntu/django-cicd-project_new"
+        PROD_DIR  = "/home/ubuntu/django-cicd-project_new"
     }
 
     stages {
@@ -15,13 +15,13 @@ pipeline {
             }
         }
 
-        stage('Create Virtual Environment') {
+        stage('Setup Python Environment') {
             steps {
                 sh '''
-                python3 -m venv venv
-                . venv/bin/activate
-                pip install --upgrade pip
-                pip install -r requirements.txt
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
                 '''
             }
         }
@@ -29,41 +29,48 @@ pipeline {
         stage('Run Django Tests') {
             steps {
                 sh '''
-                . venv/bin/activate
-                python3 manage.py test
+                    . venv/bin/activate
+                    python3 manage.py test
                 '''
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Production') {
             steps {
                 sshagent(credentials: ['ec2-ssh']) {
                     sh """
-                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_SERVER} '
-                        set -e
+                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} << 'EOF'
 
-                        cd ${PROD_PATH}
+                    set -e
 
-                        echo "===== Current Commit ====="
-                        git log --oneline -1
+                    cd ${PROD_DIR}
 
-                        echo "===== Pull Latest Code ====="
-                        git fetch origin
-                        git reset --hard origin/main
+                    echo "Current Commit:"
+                    git log --oneline -1
 
-                        echo "===== New Commit ====="
-                        git log --oneline -1
+                    echo "Fetching Latest Code..."
+                    git fetch origin
 
-                        source venv/bin/activate
+                    git reset --hard origin/main
 
-                        pip install -r requirements.txt
+                    echo "Updated Commit:"
+                    git log --oneline -1
 
-                        python3 manage.py migrate
+                    if [ ! -d "venv" ]; then
+                        python3 -m venv venv
+                    fi
 
-                        python3 manage.py collectstatic --noinput
+                    source venv/bin/activate
 
-                        echo "Deployment Successful"
-                    '
+                    pip install -r requirements.txt
+
+                    python3 manage.py migrate
+
+                    python3 manage.py collectstatic --noinput
+
+                    echo "Deployment Completed Successfully"
+
+                    EOF
                     """
                 }
             }
@@ -71,7 +78,6 @@ pipeline {
     }
 
     post {
-
         success {
             echo "CI/CD Pipeline Completed Successfully"
         }
