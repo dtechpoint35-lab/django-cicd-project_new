@@ -39,38 +39,35 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh']) {
                     sh """
-                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} << 'EOF'
+                    ssh -o StrictHostKeyChecking=no ${PROD_USER}@${PROD_HOST} '
+                        set -e
 
-                    set -e
+                        cd ${PROD_DIR}
 
-                    cd ${PROD_DIR}
+                        echo "========== CURRENT COMMIT =========="
+                        git log --oneline -1
 
-                    echo "Current Commit:"
-                    git log --oneline -1
+                        echo "========== FETCH LATEST CODE =========="
+                        git fetch origin
 
-                    echo "Fetching Latest Code..."
-                    git fetch origin
+                        echo "========== RESET TO LATEST COMMIT =========="
+                        git reset --hard origin/main
 
-                    git reset --hard origin/main
+                        echo "========== UPDATED COMMIT =========="
+                        git log --oneline -1
 
-                    echo "Updated Commit:"
-                    git log --oneline -1
+                        if [ ! -d "venv" ]; then
+                            python3 -m venv venv
+                        fi
 
-                    if [ ! -d "venv" ]; then
-                        python3 -m venv venv
-                    fi
+                        source venv/bin/activate
 
-                    source venv/bin/activate
+                        pip install -r requirements.txt
 
-                    pip install -r requirements.txt
+                        python3 manage.py migrate
 
-                    python3 manage.py migrate
-
-                    python3 manage.py collectstatic --noinput
-
-                    echo "Deployment Completed Successfully"
-
-                    EOF
+                        echo "========== DEPLOYMENT SUCCESSFUL =========="
+                    '
                     """
                 }
             }
@@ -79,11 +76,10 @@ pipeline {
 
     post {
         success {
-            echo "CI/CD Pipeline Completed Successfully"
+            echo "✅ CI/CD Pipeline Completed Successfully"
         }
-
         failure {
-            echo "CI/CD Pipeline Failed"
+            echo "❌ CI/CD Pipeline Failed"
         }
     }
 }
